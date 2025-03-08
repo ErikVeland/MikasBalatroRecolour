@@ -2715,7 +2715,8 @@ function SMODS.INIT.MikasModCollection()
             -- Check for high card and set card reference
             if context.cardarea == G.play and not context.repetition then
                 if context.scoring_name == "High Card" then
-                    if context.other_card.ability.effect == "Base" then
+                    -- Prevent crash by ensuring other_card exists before checking properties
+                    if context.other_card and context.other_card.ability and context.other_card.ability.effect == "Base" then
                         self.ability.extra.high_card = true
                         table.insert(self.ability.extra.card_refs, context.other_card)
                     end
