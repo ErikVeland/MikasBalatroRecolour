@@ -2904,13 +2904,19 @@ function SMODS.INIT.MikasModCollection()
             if context.cardarea == G.play and not context.repetition then
                 local mult = 0
                 local chips = 0
-                if context.other_card:is_suit("Diamonds") or context.other_card:is_suit("Clubs") then
-                    -- Add chips if suit is Diamonds or Clubs
-                    chips = self.ability.extra.chips
-                end
-                if context.other_card:is_suit("Hearts") or context.other_card:is_suit("Spades") then
-                    -- Add mult if Hearts or Spades
-                    mult = self.ability.extra.mult
+
+                -- Ensure other_card is valid before using it
+                if context.other_card then
+                    if context.other_card:is_suit("Diamonds") or context.other_card:is_suit("Clubs") then
+                        -- Add chips if suit is Diamonds or Clubs
+                        chips = self.ability.extra.chips
+                    end
+                    if context.other_card:is_suit("Hearts") or context.other_card:is_suit("Spades") then
+                        -- Add mult if Hearts or Spades
+                        mult = self.ability.extra.mult
+                    end
+                else
+                    sendDebugMessage("Warning: other_card is nil in Suit Alley Joker")
                 end
 
                 if mult > 0 and chips > 0 then
@@ -5583,49 +5589,134 @@ function SMODS.INIT.MikasModCollection()
         -- Initialize Joker
         init_joker(plus_one)
 
-        -- Set local variables
+        -- Localization function
         function SMODS.Jokers.j_mmc_plus_one.loc_def(card)
             return { card.ability.extra.increase }
         end
 
-        -- Calculate
+        -- Debugging function
+        local function debug_context_info(context)
+            if not context then
+                print("ERROR: context is NIL!")
+                return
+            end
+            print("DEBUG: Full context contents:")
+            for k, v in pairs(context) do
+                print("DEBUG: context[" .. tostring(k) .. "] ->", v)
+            end
+        end
+
+        -- Extract a valid card from full_hand
+        local function extract_valid_card(full_hand)
+            if not full_hand or type(full_hand) ~= "table" or #full_hand == 0 then
+                print("DEBUG: full_hand is empty or invalid.")
+                return nil
+            end
+
+            for _, entry in ipairs(full_hand) do
+                if type(entry) == "table" and entry.base and not entry.upgraded then
+                    print("DEBUG: Found valid card in full_hand.")
+                    return entry
+                end
+            end
+
+            print("WARNING: No valid card found in full_hand. Returning nil.")
+            return nil
+        end
+
+        -- Track per-round upgrades
+        local upgraded_this_hand = false
+
+        -- Calculate function
         SMODS.Jokers.j_mmc_plus_one.calculate = function(self, context)
-            -- Upgrade ranks of first hand
-            if context.individual and context.cardarea == G.play then
-                if G.GAME.current_round.hands_played == 0 then
+            print("DEBUG: Plus One Joker function called!")
+
+            -- Log full context BEFORE checking conditions
+            debug_context_info(context)
+
+            -- Ensure it's the first hand and no upgrades have happened yet
+            if context and context.cardarea == G.play then
+                if G.GAME.current_round.hands_played == 0 and not upgraded_this_hand then
+                    print("DEBUG: First hand of the round detected. Upgrading all valid cards.")
+
+                    upgraded_this_hand = true -- Prevent multiple calls
+
                     G.E_MANAGER:add_event(Event({
                         trigger = "after",
-                        delay = 0.0,
+                        delay = 0.2,
                         func = (function()
-                            -- Increase rank
-                            local card = context.other_card
-                            local suit_prefix = string.sub(card.base.suit, 1, 1) .. "_"
-                            local rank_suffix = card.base.id == 14 and 2 or math.min(card.base.id + 1, 14)
-                            if rank_suffix < 10 then
-                                rank_suffix = tostring(rank_suffix)
-                            elseif rank_suffix == 10 then
-                                rank_suffix = "T"
-                            elseif rank_suffix == 11 then
-                                rank_suffix = "J"
-                            elseif rank_suffix == 12 then
-                                rank_suffix = "Q"
-                            elseif rank_suffix == 13 then
-                                rank_suffix = "K"
-                            elseif rank_suffix == 14 then
-                                rank_suffix = "A"
+                            local upgraded_any_card = false
+
+                            -- Loop through full_hand and upgrade each card once
+                            if context.full_hand then
+                                for _, card in ipairs(context.full_hand) do
+                                    if card and type(card) == "table" and card.base and not card.upgraded then
+                                        -- Determine new rank
+                                        local suit_prefix = string.sub(card.base.suit, 1, 1) .. "_"
+                                        local rank_suffix = card.base.id == 14 and 2 or math.min(card.base.id + 1, 14)
+
+                                        if rank_suffix < 10 then
+                                            rank_suffix = tostring(rank_suffix)
+                                        elseif rank_suffix == 10 then
+                                            rank_suffix = "T"
+                                        elseif rank_suffix == 11 then
+                                            rank_suffix = "J"
+                                        elseif rank_suffix == 12 then
+                                            rank_suffix = "Q"
+                                        elseif rank_suffix == 13 then
+                                            rank_suffix = "K"
+                                        elseif rank_suffix == 14 then
+                                            rank_suffix = "A"
+                                        end
+
+                                        -- Ensure new card exists in G.P_CARDS
+                                        local new_card_key = suit_prefix .. rank_suffix
+                                        if not G.P_CARDS[new_card_key] then
+                                            print("ERROR: Invalid card key generated:", new_card_key, ". Skipping upgrade.")
+                                        else
+                                            -- Set new base card
+                                            local new_card_data = G.P_CARDS[new_card_key]
+                                            card:set_base(new_card_data)
+                                            card.upgraded = true
+                                            upgraded_any_card = true
+
+                                            -- Debug: Log the upgraded card
+                                            print("DEBUG: Upgraded Card -> ID:", tostring(card.base.id), "Suit:", tostring(card.base.suit))
+                                        end
+                                    end
+                                end
                             end
-                            card:set_base(G.P_CARDS[suit_prefix .. rank_suffix])
-                            -- Show message
-                            card_eval_status_text(self, "extra", nil, nil, nil, {
-                                message = localize("k_upgrade_ex"),
-                                instant = true
-                            })
+
+                            -- Show message if at least one card was upgraded
+                            if upgraded_any_card then
+                                card_eval_status_text(self, "extra", nil, nil, nil, {
+                                    message = localize("k_upgrade_ex"),
+                                    instant = true
+                                })
+                            end
+
                             return true
                         end)
                     }))
+                else
+                    print("DEBUG: Not the first hand of the round or already upgraded this hand. No upgrade applied.")
                 end
+            else
+                print("DEBUG: Condition not met - context.cardarea:", tostring(context and context.cardarea or "NIL"))
             end
         end
+
+        -- Reset upgrades at the start of a new round
+        G.E_MANAGER:add_event(Event({
+            trigger = "before_round",
+            func = (function()
+                upgraded_this_hand = false
+                print("DEBUG: Reset upgrade flag for the next round.")
+            end)
+        }))
+
+        -- Ensure the file is actually being loaded
+        print("DEBUG: Mika's Mod Collection - File Loaded Successfully")
     end
 end
 
