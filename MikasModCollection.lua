@@ -5614,7 +5614,7 @@ function SMODS.INIT.MikasModCollection()
             end
 
             for _, entry in ipairs(full_hand) do
-                if type(entry) == "table" and entry.base and not entry.upgraded then
+                if type(entry) == "table" and entry.base then
                     print("DEBUG: Found valid card in full_hand.")
                     return entry
                 end
@@ -5624,8 +5624,20 @@ function SMODS.INIT.MikasModCollection()
             return nil
         end
 
-        -- Track per-round upgrades
-        local upgraded_this_hand = false
+        -- Track whether we've upgraded this round
+        local upgraded_this_round = false
+
+        -- Hook into round start to reset flag
+        local function reset_round_tracking()
+            print("DEBUG: Resetting upgraded_this_round flag for new round.")
+            upgraded_this_round = false
+        end
+
+        -- Hook into the game's round start event
+        G.E_MANAGER:add_event(Event({
+            trigger = "new_round",
+            func = reset_round_tracking
+        }))
 
         -- Calculate function
         SMODS.Jokers.j_mmc_plus_one.calculate = function(self, context)
@@ -5634,65 +5646,74 @@ function SMODS.INIT.MikasModCollection()
             -- Log full context BEFORE checking conditions
             debug_context_info(context)
 
-            -- Ensure it's the first hand and no upgrades have happened yet
+            -- Ensure it's the first hand and we haven't upgraded yet
             if context and context.cardarea == G.play then
-                if G.GAME.current_round.hands_played == 0 and not upgraded_this_hand then
-                    print("DEBUG: First hand of the round detected. Upgrading all valid cards.")
+                print("DEBUG: hands_played =", G.GAME.current_round.hands_played)
+                print("DEBUG: upgraded_this_round =", upgraded_this_round)
 
-                    upgraded_this_hand = true -- Prevent multiple calls
+                if G.GAME.current_round.hands_played == 0 and not upgraded_this_round then
+                    print("DEBUG: First hand of the round detected. Attempting upgrade.")
+
+                    upgraded_this_round = true  -- Mark as upgraded
 
                     G.E_MANAGER:add_event(Event({
                         trigger = "after",
                         delay = 0.2,
                         func = (function()
-                            local upgraded_any_card = false
+                            -- Fetch a valid card
+                            local card = context.other_card or context.card or context.source_card
 
-                            -- Loop through full_hand and upgrade each card once
-                            if context.full_hand then
-                                for _, card in ipairs(context.full_hand) do
-                                    if card and type(card) == "table" and card.base and not card.upgraded then
-                                        -- Determine new rank
-                                        local suit_prefix = string.sub(card.base.suit, 1, 1) .. "_"
-                                        local rank_suffix = card.base.id == 14 and 2 or math.min(card.base.id + 1, 14)
-
-                                        if rank_suffix < 10 then
-                                            rank_suffix = tostring(rank_suffix)
-                                        elseif rank_suffix == 10 then
-                                            rank_suffix = "T"
-                                        elseif rank_suffix == 11 then
-                                            rank_suffix = "J"
-                                        elseif rank_suffix == 12 then
-                                            rank_suffix = "Q"
-                                        elseif rank_suffix == 13 then
-                                            rank_suffix = "K"
-                                        elseif rank_suffix == 14 then
-                                            rank_suffix = "A"
-                                        end
-
-                                        -- Ensure new card exists in G.P_CARDS
-                                        local new_card_key = suit_prefix .. rank_suffix
-                                        if not G.P_CARDS[new_card_key] then
-                                            print("ERROR: Invalid card key generated:", new_card_key, ". Skipping upgrade.")
-                                        else
-                                            -- Set new base card
-                                            local new_card_data = G.P_CARDS[new_card_key]
-                                            card:set_base(new_card_data)
-                                            card.upgraded = true
-                                            upgraded_any_card = true
-
-                                            -- Debug: Log the upgraded card
-                                            print("DEBUG: Upgraded Card -> ID:", tostring(card.base.id), "Suit:", tostring(card.base.suit))
-                                        end
-                                    end
-                                end
+                            -- If no valid card found, check full_hand
+                            if not (card and type(card) == "table" and card.base) then
+                                print("DEBUG: No direct valid card found. Checking full_hand...")
+                                card = extract_valid_card(context.full_hand)
                             end
 
-                            -- Show message if at least one card was upgraded
-                            if upgraded_any_card then
-                                card_eval_status_text(self, "extra", nil, nil, nil, {
-                                    message = localize("k_upgrade_ex"),
-                                    instant = true
-                                })
+                            -- If STILL no valid card found, default to a King of Spades (S_K)
+                            local used_default = false
+                            if type(card) ~= "table" or not card.base then
+                                print("WARNING: No valid card found. Upgrading to default King (S_K).")
+                                card = { base = G.P_CARDS["S_K"] }
+                                used_default = true
+                            end
+
+                            -- Debug: Log the original card before upgrade
+                            print("DEBUG: Card Before Upgrade -> ID:", card.base.id, "Suit:", card.base.suit)
+
+                            -- Determine new rank
+                            local suit_prefix = string.sub(card.base.suit, 1, 1) .. "_"
+                            local rank_suffix = card.base.id == 14 and 2 or math.min(card.base.id + 1, 14)
+
+                            if rank_suffix < 10 then
+                                rank_suffix = tostring(rank_suffix)
+                            elseif rank_suffix == 10 then
+                                rank_suffix = "T"
+                            elseif rank_suffix == 11 then
+                                rank_suffix = "J"
+                            elseif rank_suffix == 12 then
+                                rank_suffix = "Q"
+                            elseif rank_suffix == 13 then
+                                rank_suffix = "K"
+                            elseif rank_suffix == 14 then
+                                rank_suffix = "A"
+                            end
+
+                            -- Set new base card
+                            local new_card_data = G.P_CARDS[suit_prefix .. rank_suffix]
+                            card:set_base(new_card_data)
+
+                            -- Debug: Log the upgraded card
+                            print("DEBUG: Card After Upgrade -> ID:", card.base.id, "Suit:", card.base.suit)
+
+                            -- Show message
+                            card_eval_status_text(self, "extra", nil, nil, nil, {
+                                message = localize("k_upgrade_ex"),
+                                instant = true
+                            })
+
+                            -- Log whether the default King was used
+                            if used_default then
+                                print("INFO: Default King was used as no valid card was found.")
                             end
 
                             return true
@@ -5705,15 +5726,6 @@ function SMODS.INIT.MikasModCollection()
                 print("DEBUG: Condition not met - context.cardarea:", tostring(context and context.cardarea or "NIL"))
             end
         end
-
-        -- Reset upgrades at the start of a new round
-        G.E_MANAGER:add_event(Event({
-            trigger = "before_round",
-            func = (function()
-                upgraded_this_hand = false
-                print("DEBUG: Reset upgrade flag for the next round.")
-            end)
-        }))
 
         -- Ensure the file is actually being loaded
         print("DEBUG: Mika's Mod Collection - File Loaded Successfully")
