@@ -1929,7 +1929,7 @@ function SMODS.INIT.MikasModCollection()
                 text = {
                     "Gain {C:money}$#1#{}, {C:money}$#2#{}, {C:money}$#3#{}, {C:money}$#4#{}, or {C:money}$#5#{}",
                     "when {C:attention}1, 2, 3, 4, or 5{}",
-                    "{C:attention}7-rank cards{} are played in a hand,",
+                    "{C:attention}7-rank cards{} are scored in a hand,",
                     "respectively.",
                     "{C:inactive}Art by {C:green,E:1,S:1.1}Grassy"
                 }
