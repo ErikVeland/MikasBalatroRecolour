@@ -2975,15 +2975,14 @@ function SMODS.INIT.MikasModCollection()
 
         -- Calculate
         SMODS.Jokers.j_mmc_suit_alley.calculate = function(self, context)
-            if context.cardarea == G.play and not context.repetition then
+            if context.cardarea == G.play and not context.repetition and context.other_card then
                 local mult = 0
                 local chips = 0
+
                 if context.other_card:is_suit("Diamonds") or context.other_card:is_suit("Clubs") then
-                    -- Add chips if suit is Diamonds or Clubs
                     chips = self.ability.extra.chips
                 end
                 if context.other_card:is_suit("Hearts") or context.other_card:is_suit("Spades") then
-                    -- Add mult if Hearts or Spades
                     mult = self.ability.extra.mult
                 end
 
