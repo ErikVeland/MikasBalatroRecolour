@@ -20,7 +20,7 @@ local config = {
     perfectPrecisionDeck = true, -- Do not enable without sniperJoker
     -- Tarot Cards
     aceOfPentaclesTarot = true,
-    pageOfPentaclesTarot = true,
+    pageOfPentaclesTarot = false,
     kingOfCupsTarot = false, -- In Development, do not enable
     commonTarot = false,     -- In Development, do not enable
     uncommonTarot = false,   -- In Development, do not enable
@@ -45,7 +45,7 @@ local config = {
     delayedJoker = true,
     showoffJoker = true,
     sniperJoker = true,
-    blackjackJoker = true,
+    blackjackJoker = false,
     batmanJoker = true,
     bombJoker = true,
     eyeChartJoker = true,
@@ -71,8 +71,8 @@ local config = {
     specialEditionJoker = true,
     stockpilerJoker = true,
     studentLoansJoker = true,
-    brokeJoker = true,
-    goForBrokeJoker = true,
+    brokeJoker = false,
+    goForBrokeJoker = false,
     streetFighterJoker = true,
     checklistJoker = true,
     oneOfUsJoker = true,
@@ -4803,7 +4803,7 @@ function SMODS.INIT.MikasModCollection()
             slug = "mmc_pack_a_punch",
             ability = {
                 extra = {
-                    dollars = 20
+                    dollars = 10
                 }
             },
             rarity = 3,
@@ -4811,7 +4811,7 @@ function SMODS.INIT.MikasModCollection()
             unlocked = true,
             discovered = true,
             blueprint_compat = false,
-            eternal_compat = true
+            eternal_compat = false
         }
 
         -- Initialize Joker
