@@ -5596,38 +5596,27 @@ function SMODS.INIT.MikasModCollection()
 
         -- Calculate
         SMODS.Jokers.j_mmc_plus_one.calculate = function(self, context)
-            -- Upgrade ranks of first hand
-            if context.individual and context.cardarea == G.play then
-                if G.GAME.current_round.hands_played == 0 then
+            -- Ensure we're in the play area, it's the first hand, and other_card exists
+            if context.individual and context.cardarea == G.play and G.GAME.current_round.hands_played == 0 then
+                if context.other_card then  -- 🛠️ FIX: Prevent crash when other_card is nil
                     G.E_MANAGER:add_event(Event({
                         trigger = "after",
                         delay = 0.0,
-                        func = (function()
-                            -- Increase rank
+                        func = function()
                             local card = context.other_card
-                            local suit_prefix = string.sub(card.base.suit, 1, 1) .. "_"
-                            local rank_suffix = card.base.id == 14 and 2 or math.min(card.base.id + 1, 14)
-                            if rank_suffix < 10 then
-                                rank_suffix = tostring(rank_suffix)
-                            elseif rank_suffix == 10 then
-                                rank_suffix = "T"
-                            elseif rank_suffix == 11 then
-                                rank_suffix = "J"
-                            elseif rank_suffix == 12 then
-                                rank_suffix = "Q"
-                            elseif rank_suffix == 13 then
-                                rank_suffix = "K"
-                            elseif rank_suffix == 14 then
-                                rank_suffix = "A"
+                            if card and card.base then  -- 🛠️ Extra safety check
+                                local suit_prefix = string.sub(card.base.suit, 1, 1) .. "_"
+                                local rank_suffix = card.base.id == 14 and 2 or math.min(card.base.id + 1, 14)
+                                local rank_map = { [10] = "T", [11] = "J", [12] = "Q", [13] = "K", [14] = "A" }
+                                rank_suffix = rank_map[rank_suffix] or tostring(rank_suffix)
+                                card:set_base(G.P_CARDS[suit_prefix .. rank_suffix])
+                                card_eval_status_text(self, "extra", nil, nil, nil, {
+                                    message = localize("k_upgrade_ex"),
+                                    instant = true
+                                })
                             end
-                            card:set_base(G.P_CARDS[suit_prefix .. rank_suffix])
-                            -- Show message
-                            card_eval_status_text(self, "extra", nil, nil, nil, {
-                                message = localize("k_upgrade_ex"),
-                                instant = true
-                            })
                             return true
-                        end)
+                        end
                     }))
                 end
             end
