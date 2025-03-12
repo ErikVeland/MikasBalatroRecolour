@@ -5633,10 +5633,14 @@ function SMODS.INIT.MikasModCollection()
             upgraded_this_round = false
         end
 
-        -- Hook into the game's round start event
         G.E_MANAGER:add_event(Event({
+            delay = 1.0,  -- Ensure it doesn’t interfere with early game loading
             trigger = "new_round",
-            func = reset_round_tracking
+            func = function()
+                if G.STATE ~= "intro" then -- Only run if the game is NOT in intro state
+                    reset_round_tracking()
+                end
+            end
         }))
 
         -- Calculate function
