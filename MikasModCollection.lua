@@ -5633,15 +5633,19 @@ function SMODS.INIT.MikasModCollection()
             upgraded_this_round = false
         end
 
-        G.E_MANAGER:add_event(Event({
-            delay = 1.0,  -- Ensure it doesn’t interfere with early game loading
-            trigger = "new_round",
-            func = function()
-                if G.STATE ~= "intro" then -- Only run if the game is NOT in intro state
-                    reset_round_tracking()
-                end
-            end
-        }))
+       local has_intro_played = false
+
+       G.E_MANAGER:add_event(Event({
+           trigger = "new_round",
+           func = function()
+               if not has_intro_played then
+                   has_intro_played = true
+                   print("Skipping round tracking for the first round due to intro...")
+               else
+                   reset_round_tracking()
+               end
+           end
+       }))
 
         -- Calculate function
         SMODS.Jokers.j_mmc_plus_one.calculate = function(self, context)
