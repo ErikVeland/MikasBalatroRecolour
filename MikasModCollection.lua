@@ -5635,9 +5635,7 @@ function SMODS.INIT.MikasModCollection()
     end
 
     if config.plusOneJoker then
-        print("[DEBUG] 🚀 Plus One Joker Mod is ACTIVE!")
-
-        -- Define Joker (With All Required Fields)
+        -- Create Joker
         local plus_one = {
             loc = {
                 name = "Plus One",
@@ -5660,116 +5658,43 @@ function SMODS.INIT.MikasModCollection()
             unlocked = true,
             discovered = true,
             blueprint_compat = false,
-            eternal_compat = true,
-            effect = "Upgrade Hand",
-            atlas = "Default",
-            soul_pos = { x = 0, y = 0 }
+            eternal_compat = true
         }
 
-        -- Debug: Check Fields Before Init
-        print("[DEBUG] 🔍 Joker Data Before Init:")
-        for k, v in pairs(plus_one) do print(k, v) end
+        -- Initialize Joker
+        init_joker(plus_one)
 
-        -- Ensure Joker isn't already registered before trying to add it
-        if not G.P_CENTERS[plus_one.slug] then
-            print("[DEBUG] 🔄 Manually adding Joker to G.P_CENTERS...")
-            G.P_CENTERS[plus_one.slug] = plus_one
-        else
-            print("[DEBUG] ✅ Joker already exists in G.P_CENTERS")
+        -- Set local variables
+        function SMODS.Jokers.j_mmc_plus_one.loc_def(card)
+            return { card.ability.extra.increase }
         end
 
-        -- Function to add Joker to the shop
-        function force_add_plus_one_joker_to_shop()
-            print("[DEBUG] 🏪 Forcing Plus One Joker into the shop...")
-
-            -- Check if G.P_CENTERS exists
-            if not G.P_CENTERS then
-                print("[ERROR] ❌ G.P_CENTERS is NIL! Cannot find Joker data.")
-                return
-            end
-
-            -- Ensure Joker exists in G.P_CENTERS
-            local joker_center = G.P_CENTERS["mmc_plus_one"]
-            if not joker_center then
-                print("[ERROR] ❌ Joker 'mmc_plus_one' not found in G.P_CENTERS!")
-                return
-            end
-
-            print("[DEBUG] 🔍 Found Joker in G.P_CENTERS.")
-
-            -- Check if shop exists
-            if not G.shop then
-                print("[ERROR] ❌ Shop (G.shop) is NIL! Cannot add Joker.")
-                return
-            end
-            if not G.shop.jokers then
-                print("[ERROR] ❌ Shop jokers (G.shop.jokers) is NIL! Cannot add Joker.")
-                return
-            end
-            if not G.shop.jokers.cards then
-                print("[ERROR] ❌ G.shop.jokers.cards is NIL! Something is wrong with the shop structure.")
-                return
-            end
-
-            -- Ensure the Joker isn't already in the shop
-            for _, card in pairs(G.shop.jokers.cards) do
-                if card.slug == "mmc_plus_one" then
-                    print("[WARN] ⚠️ Plus One Joker is already in the shop! Skipping addition.")
-                    return
+        -- Calculate
+        SMODS.Jokers.j_mmc_plus_one.calculate = function(self, context)
+            -- Ensure we're in the play area, it's the first hand, and other_card exists
+            if context.individual and context.cardarea == G.play and G.GAME.current_round.hands_played == 0 then
+                if context.other_card then  -- 🛠️ FIX: Prevent crash when other_card is nil
+                    G.E_MANAGER:add_event(Event({
+                        trigger = "after",
+                        delay = 0.0,
+                        func = function()
+                            local card = context.other_card
+                            if card and card.base then  -- 🛠️ Extra safety check
+                                local suit_prefix = string.sub(card.base.suit, 1, 1) .. "_"
+                                local rank_suffix = card.base.id == 14 and 2 or math.min(card.base.id + 1, 14)
+                                local rank_map = { [10] = "T", [11] = "J", [12] = "Q", [13] = "K", [14] = "A" }
+                                rank_suffix = rank_map[rank_suffix] or tostring(rank_suffix)
+                                card:set_base(G.P_CARDS[suit_prefix .. rank_suffix])
+                                card_eval_status_text(self, "extra", nil, nil, nil, {
+                                    message = localize("k_upgrade_ex"),
+                                    instant = true
+                                })
+                            end
+                            return true
+                        end
+                    }))
                 end
             end
-
-            -- Create the Joker
-            print("[DEBUG] 🚀 Creating Plus One Joker object...")
-            local new_joker = SMODS.Joker:new(
-                joker_center.ability_name,
-                joker_center.slug,
-                joker_center.ability,
-                { x = 0, y = 0 },
-                joker_center.loc,
-                joker_center.rarity,
-                joker_center.cost,
-                joker_center.unlocked,
-                joker_center.discovered,
-                joker_center.blueprint_compat,
-                joker_center.eternal_compat,
-                joker_center.effect,
-                joker_center.atlas,
-                joker_center.soul_pos
-            )
-
-            if not new_joker then
-                print("[ERROR] ❌ Failed to create new Joker object!")
-                return
-            end
-
-            print("[DEBUG] ✅ Joker object created successfully.")
-
-            -- **NOW** add Joker to the shop (AFTER creation)
-            print("[DEBUG] 🛒 Injecting Plus One Joker into shop...")
-            table.insert(G.shop.jokers.cards, new_joker)
-
-            -- Refresh shop UI if possible
-            if G.shop.jokers.refresh then
-                print("[DEBUG] 🔄 Refreshing shop UI...")
-                G.shop.jokers:refresh()
-            else
-                print("[WARN] ⚠️ G.shop.jokers:refresh() is missing! UI might not update...")
-            end
-
-            print("[DEBUG] ✅ Plus One Joker successfully added to the shop!")
-        end
-
-        -- **Force the Joker to be added the first time shop opens**
-        force_add_plus_one_joker_to_shop()
-
-        -- Hook into the shop refresh function to ensure Joker appears
-        G.FUNCS.shop_refresh_old = G.FUNCS.shop_refresh or function() end
-
-        G.FUNCS.shop_refresh = function()
-            print("[DEBUG] 🔄 Shop refreshed, ensuring Plus One Joker is present...")
-            force_add_plus_one_joker_to_shop()
-            G.FUNCS.shop_refresh_old()  -- Call the original refresh function
         end
     end
 end
