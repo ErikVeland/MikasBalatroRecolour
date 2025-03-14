@@ -5560,66 +5560,208 @@ function SMODS.INIT.MikasModCollection()
     end
 
     if config.plusOneJoker then
-        -- Create Joker
-        local plus_one = {
-            loc = {
-                name = "Plus One",
-                text = {
-                    "Increases rank",
-                    "of scored cards by",
-                    "{C:attention}#1#{} on the {C:attention}first",
-                    "{C:attention}hand{} of round"
-                }
-            },
-            ability_name = "MMC Plus One",
-            slug = "mmc_plus_one",
-            ability = {
-                extra = {
-                    increase = 1
-                }
-            },
-            rarity = 3,
-            cost = 8,
-            unlocked = true,
-            discovered = true,
-            blueprint_compat = false,
-            eternal_compat = true
-        }
+        -- ✅ Register "Plus One" Joker if missing
+        if not SMODS.Jokers.j_mmc_plus_one then
+            print("[INFO] Registering 'Plus One' Joker before game starts...")
 
-        -- Initialize Joker
-        init_joker(plus_one)
+            local plus_one = {
+                loc = {
+                    name = "Plus One",
+                    text = {
+                        "Increases rank",
+                        "of scored cards by",
+                        "{C:attention}#1#{} on the {C:attention}first",
+                        "{C:attention}hand{} of round"
+                    }
+                },
+                ability_name = "MMC Plus One",
+                slug = "j_mmc_plus_one",
+                ability = { extra = { increase = 1 } },
+                rarity = 3,
+                cost = 8,
+                unlocked = true,
+                discovered = true,
+                blueprint_compat = false,
+                eternal_compat = true
+            }
 
-        -- Set local variables
-        function SMODS.Jokers.j_mmc_plus_one.loc_def(card)
-            return { card.ability.extra.increase }
+            init_joker(plus_one)
+
+            -- ✅ Double-check registration
+            if not SMODS.Jokers.j_mmc_plus_one then
+                print("[ERROR] 'Plus One' Joker STILL NOT registered! Aborting early.")
+                return
+            end
         end
 
-        -- Calculate
-        SMODS.Jokers.j_mmc_plus_one.calculate = function(self, context)
-            -- Ensure we're in the play area, it's the first hand, and other_card exists
-            if context.individual and context.cardarea == G.play and G.GAME.current_round.hands_played == 0 then
-                if context.other_card then  -- 🛠️ FIX: Prevent crash when other_card is nil
-                    G.E_MANAGER:add_event(Event({
-                        trigger = "after",
-                        delay = 0.0,
-                        func = function()
-                            local card = context.other_card
-                            if card and card.base then  -- 🛠️ Extra safety check
-                                local suit_prefix = string.sub(card.base.suit, 1, 1) .. "_"
-                                local rank_suffix = card.base.id == 14 and 2 or math.min(card.base.id + 1, 14)
-                                local rank_map = { [10] = "T", [11] = "J", [12] = "Q", [13] = "K", [14] = "A" }
-                                rank_suffix = rank_map[rank_suffix] or tostring(rank_suffix)
-                                card:set_base(G.P_CARDS[suit_prefix .. rank_suffix])
-                                card_eval_status_text(self, "extra", nil, nil, nil, {
-                                    message = localize("k_upgrade_ex"),
-                                    instant = true
-                                })
-                            end
-                            return true
-                        end
-                    }))
+        -- ✅ Localization (Fix for "nil" text issue)
+        function SMODS.Jokers.j_mmc_plus_one.loc_def(card)
+            return { card.ability.extra.increase or 1 }
+        end
+
+        -- ✅ Prevents infinite additions per round
+        local plus_one_added = false
+        local plus_one_used = false  -- ✅ Ensures effect only applies once per round
+
+        -- ✅ Game State Watcher to Ensure Debugging Works
+        local last_state = G.STATE
+        G.E_MANAGER:add_event(Event({
+            trigger = "before",
+            delay = 0.1,
+            func = function()
+                if G.STATE ~= last_state then
+                    print("[DEBUG] Game state changed: " .. tostring(last_state) .. " -> " .. tostring(G.STATE))
+                    last_state = G.STATE
+                end
+                return false  -- ✅ Keep event active indefinitely
+            end
+        }))
+
+        -- ✅ Function to apply 'Plus One' Joker effect
+        local function apply_plus_one_effect()
+            if plus_one_used then
+                print("[WARNING] 'Plus One' effect already applied this round. Skipping.")
+                return
+            end
+
+            if not G.hand or #G.hand.cards == 0 then
+                print("[WARNING] No cards in hand. Skipping 'Plus One' effect.")
+                return
+            end
+
+            print("[DEBUG] 'Plus One' effect is applying to the first **scored** hand of the round!")
+
+            local upgraded = false
+
+            for _, card in ipairs(G.hand.cards) do
+                if card.rank and card.scored then  -- ✅ Only upgrade **scored** cards
+                    local increase = 1
+                    local new_rank = math.min(card.rank + increase, 14)  -- Prevents exceeding max rank
+
+                    print("[INFO] Upgraded " .. card.rank .. " -> " .. new_rank)
+                    card.rank = new_rank
+                    upgraded = true
                 end
             end
+
+            if upgraded then
+                plus_one_used = true  -- ✅ Ensures this only happens once per round
+            else
+                print("[WARNING] No scored cards found in the first hand. Skipping upgrade.")
+            end
+        end
+
+        -- ✅ Hook into scoring state to apply effect at the right time
+        local original_score_hand = G.FUNCS.score_hand
+        G.FUNCS.score_hand = function(...)
+            print("[DEBUG] Hand is being scored. Checking 'Plus One' effect...")
+            apply_plus_one_effect()  -- ✅ Apply the effect exactly once
+            return original_score_hand(...)
+        end
+
+        -- ✅ Function to Add Joker After Blind Selection
+        local function add_plus_one_joker_after_blind()
+            if plus_one_added then
+                print("[DEBUG] 'Plus One' Joker already added this round. Skipping.")
+                return
+            end
+
+            print("[DEBUG] Checking if G.GAME and G.jokers are ready after selecting Blind...")
+
+            if not G.GAME or not G.jokers then
+                print("[ERROR] G.GAME or G.jokers is still nil! Aborting Joker addition.")
+                return
+            end
+
+            -- ✅ Ensure registration (failsafe)
+            if not SMODS.Jokers.j_mmc_plus_one then
+                print("[ERROR] 'Plus One' Joker (j_mmc_plus_one) is STILL missing! Skipping.")
+                return
+            end
+
+            -- ✅ Ensure center exists
+            if not G.P_CENTERS["j_mmc_plus_one"] then
+                print("[ERROR] No center found for 'Plus One' Joker. Creating fallback center...")
+                G.P_CENTERS["j_mmc_plus_one"] = {
+                    key = "j_mmc_plus_one",
+                    discovered = true,
+                    set = "Joker",
+                    name = "Plus One"
+                }
+            end
+
+            -- ✅ Ensure Joker doesn't already exist in deck
+            for _, joker in ipairs(G.jokers.cards) do
+                if joker.slug == "j_mmc_plus_one" then
+                    print("[DEBUG] 'Plus One' Joker is already in the deck. Skipping addition.")
+                    return
+                end
+            end
+
+            print("[INFO] Adding 'Plus One' Joker after selecting Blind...")
+
+            -- ✅ Create Joker
+            local plus_one_joker = create_card("Joker", G.jokers, nil, nil, nil, nil, "j_mmc_plus_one", nil)
+
+            -- ✅ Ensure creation was successful
+            if plus_one_joker then
+                plus_one_joker:set_base(SMODS.Jokers.j_mmc_plus_one)
+                plus_one_joker.config.center = G.P_CENTERS["j_mmc_plus_one"]
+                plus_one_joker:set_sprites(G.P_CENTERS["j_mmc_plus_one"], nil)
+
+                -- ✅ Add to deck
+                plus_one_joker:add_to_deck()
+                G.jokers:emplace(plus_one_joker)
+                plus_one_joker:start_materialize()
+
+                plus_one_added = true  -- ✅ Prevents infinite addition
+                print("[INFO] Successfully added 'Plus One' Joker after selecting Blind.")
+
+                -- ✅ Force Game to Resume and Ensure Hand is Dealt
+                G.E_MANAGER:add_event(Event({
+                    trigger = "after",
+                    delay = 0.2,
+                    func = function()
+                        -- ✅ Ensure game state transitions correctly
+                        if G.STATE == G.STATES.BLIND_SELECT then
+                            print("[DEBUG] Blind selection still active, forcing game to resume...")
+                            G.STATE = G.STATES.RUN
+                            G.STATE_COMPLETE = false
+                        end
+
+                        -- ✅ Check if hand is empty and deal if needed
+                        if G.hand and #G.hand.cards == 0 then
+                            print("[INFO] Hand is empty after Blind. Dealing new hand...")
+                            G.FUNCS.draw_from_deck_to_hand()
+                        else
+                            print("[INFO] Hand already contains cards. Skipping deal.")
+                        end
+                    return true
+                    end
+                }))
+
+            else
+                print("[ERROR] Failed to create 'Plus One' Joker.")
+            end
+        end
+
+        -- ✅ Hook into Blind selection, ensuring we reset the flag each round
+        local original_select_blind = G.FUNCS.select_blind
+        G.FUNCS.select_blind = function(e)
+            plus_one_added = false
+            plus_one_used = false  -- ✅ Reset effect each round
+            original_select_blind(e)
+
+            G.E_MANAGER:add_event(Event({
+                trigger = "after",
+                delay = 0.5,
+                func = function()
+                    if not plus_one_added then
+                        add_plus_one_joker_after_blind()
+                    end
+                return true
+                end
+            }))
         end
     end
 end
