@@ -5560,23 +5560,20 @@ function SMODS.INIT.MikasModCollection()
     end
 
     if config.plusOneJoker then
-        -- Create Joker
         local plus_one = {
             loc = {
                 name = "Plus One",
                 text = {
                     "Increases rank",
-                    "of scored cards by",
-                    "{C:attention}#1#{} on the {C:attention}first",
-                    "{C:attention}hand{} of round"
+                    "of all cards",
+                    "in the first hand by",
+                    "{C:attention}#1#{}"
                 }
             },
             ability_name = "MMC Plus One",
             slug = "mmc_plus_one",
             ability = {
-                extra = {
-                    increase = 1
-                }
+                extra = { increase = 1 }
             },
             rarity = 3,
             cost = 8,
@@ -5586,7 +5583,6 @@ function SMODS.INIT.MikasModCollection()
             eternal_compat = true
         }
 
-        -- Initialize Joker
         init_joker(plus_one)
 
         -- Set local variables
@@ -5596,29 +5592,20 @@ function SMODS.INIT.MikasModCollection()
 
         -- Calculate
         SMODS.Jokers.j_mmc_plus_one.calculate = function(self, context)
-            -- Ensure we're in the play area, it's the first hand, and other_card exists
-            if context.individual and context.cardarea == G.play and G.GAME.current_round.hands_played == 0 then
-                if context.other_card then  -- 🛠️ FIX: Prevent crash when other_card is nil
-                    G.E_MANAGER:add_event(Event({
-                        trigger = "after",
-                        delay = 0.0,
-                        func = function()
-                            local card = context.other_card
-                            if card and card.base then  -- 🛠️ Extra safety check
-                                local suit_prefix = string.sub(card.base.suit, 1, 1) .. "_"
-                                local rank_suffix = card.base.id == 14 and 2 or math.min(card.base.id + 1, 14)
-                                local rank_map = { [10] = "T", [11] = "J", [12] = "Q", [13] = "K", [14] = "A" }
-                                rank_suffix = rank_map[rank_suffix] or tostring(rank_suffix)
-                                card:set_base(G.P_CARDS[suit_prefix .. rank_suffix])
-                                card_eval_status_text(self, "extra", nil, nil, nil, {
-                                    message = localize("k_upgrade_ex"),
-                                    instant = true
-                                })
-                            end
-                            return true
-                        end
-                    }))
+            if context.individual and context.cardarea == G.play and G.GAME.current_round.hands_played == 0 and context.other_card then
+                local card = context.other_card
+                if card and card.base then
+                    local suit_prefix = string.sub(card.base.suit, 1, 1) .. "_"
+                    local rank_suffix = card.base.id == 14 and 2 or math.min(card.base.id + 1, 14)
+                    local rank_map = { [10] = "T", [11] = "J", [12] = "Q", [13] = "K", [14] = "A" }
+                    rank_suffix = rank_map[rank_suffix] or tostring(rank_suffix)
+                    card:set_base(G.P_CARDS[suit_prefix .. rank_suffix])
+                    card_eval_status_text(self, "extra", nil, nil, nil, {
+                        message = localize("k_upgrade_ex"),
+                        instant = true
+                    })
                 end
+                return { card = self }
             end
         end
     end
